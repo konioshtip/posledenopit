@@ -1,0 +1,297 @@
+Solana DeFi Platform е production-ready, enterprise-grade децентрализирана борса с усъвършенствани AI функции, реално време мониторинг и силна сигурност. Платформата осигурява лесен swap на токени, управление на портфолио, AI-базирани търговски инсайти и професионално UX върху Solana блокчейна.
+🏗️ Архитектурна схема
+
+graph TB
+  subgraph Frontend
+    A[Next.js 14 App]
+    B[React Components]
+    C[State Management]
+    D[Wallet Integration]
+  end
+
+  subgraph Backend
+    E[Express API Server]
+    F[Service Container]
+    G[Circuit Breakers]
+    H[Rate Limiting]
+  end
+
+  subgraph External Services
+    I[Jupiter Aggregator]
+    J[Solana RPC]
+    K[Deepseek AI]
+    L[Price Feeds]
+  end
+
+  subgraph Infrastructure
+    M[Redis Cache]
+    N[Prometheus Metrics]
+    O[Grafana Dashboard]
+    P[Docker Containers]
+  end
+
+  A --> E
+  E --> F
+  F --> I
+  F --> J
+  F --> K
+  E --> M
+  E --> N
+  N --> O
+
+📁 PROJECT STRUCTURE
+
+solana-defi-platform-v2/
+├── backend/                         # Node.js Express API Server
+│   ├── src/
+│   │   ├── config/                  # Environment configs & validation
+│   │   ├── middleware/              # CORS, security middleware
+│   │   ├── routes/                  # API endpoints (swap, portfolio, ai, tokens)
+│   │   ├── services/                # Core business logic and integrations
+│   │   ├── utils/                   # Utils: cache, circuit breaker, logger, validation
+│   │   ├── types/                   # TypeScript types
+│   │   ├── index.ts                 # Main server entry
+│   │   └── production-server.ts    # Prod server config
+│   ├── tests/                      # Test suites
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── Dockerfile
+├── frontend/                       # Next.js React App
+│   ├── src/
+│   │   ├── app/                    # App router: layout, page, globals.css
+│   │   ├── components/             # UI components & features (swap UI, portfolio, AI)
+│   │   ├── contexts/               # React contexts (portfolio, theme, wallet)
+│   │   ├── hooks/                  # Custom hooks (API, wallet, tokens)
+│   │   ├── lib/                    # API clients & external API wrappers
+│   │   ├── utils/                  # Polyfills, rate limiting
+│   │   └── config/                 # Frontend environment config
+│   ├── public/                     # Static assets
+│   ├── package.json
+│   ├── next.config.js
+│   ├── tailwind.config.js
+│   ├── tsconfig.json
+│   └── Dockerfile
+├── shared/                         # Shared TS types
+│   └── types/
+│       └── index.ts
+├── scripts/                        # Deployment & utility scripts
+├── docker-compose.production.yml  # Prod Docker compose
+├── README.md
+├── PRODUCTION_READY.md
+└── test-enhanced-features.js
+
+🔧 CORE SERVICES ARCHITECTURE
+1. Service Container (Dependency Injection)
+
+export class ServiceContainer {
+  private services = new Map<string, BaseService>();
+
+  register<T extends BaseService>(service: T): void {
+    this.services.set(service.serviceName, service);
+    logger.info(`Service registered: ${service.serviceName}`);
+  }
+
+  get<T extends BaseService>(serviceName: string): T {
+    const service = this.services.get(serviceName);
+    if (!service) throw new Error(`Service not found: ${serviceName}`);
+    return service as T;
+  }
+}
+
+Основни услуги:
+
+    JupiterService, TokenListService, EnhancedJupiterService
+
+    DeepseekAIService, PortfolioService
+
+    SwapSecurityService, RPCManager
+
+2. Circuit Breaker Pattern
+
+export class CircuitBreaker {
+  private state = CircuitState.CLOSED;
+  private failureCount = 0;
+  private nextAttempt = 0;
+
+  async execute<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.state === CircuitState.OPEN && Date.now() < this.nextAttempt) {
+      throw new Error("Circuit breaker is OPEN");
+    }
+    if (this.state === CircuitState.OPEN) this.state = CircuitState.HALF_OPEN;
+
+    try {
+      const result = await operation();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
+  }
+}
+
+3. Logging System
+
+export const createLogger = (service: string): winston.Logger =>
+  winston.createLogger({
+    level: env.LOG_LEVEL,
+    format: winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.errors({ stack: true }),
+      winston.format.json()
+    ),
+    defaultMeta: { service },
+    transports: [
+      new winston.transports.Console(),
+      new winston.transports.File({ filename: "logs/error.log", level: "error" }),
+      new winston.transports.File({ filename: "logs/combined.log" }),
+    ],
+  });
+
+🔄 API ARCHITECTURE
+Примерна структура на API рутове с валидация и логване
+
+router.post("/quote", async (req, res) => {
+  const requestId = generateRequestId();
+  const startTime = Date.now();
+
+  try {
+    const validatedData = SwapQuoteRequestSchema.parse(req.body);
+    logger.info("Swap quote request", { requestId, ...validatedData });
+
+    const quote = await enhancedJupiterService.getSwapQuote(validatedData);
+
+    logger.performance("Quote generated", startTime, {
+      requestId,
+      duration: Date.now() - startTime,
+      priceImpact: quote.priceImpactPct,
+    });
+
+    res.json({ success: true, data: quote, requestId, timestamp: Date.now() });
+  } catch (error) {
+    logger.error("Quote request failed", { requestId, error: error.message, stack: error.stack });
+    res.status(error.statusCode || 500).json({ success: false, error: error.message, requestId, timestamp: Date.now() });
+  }
+});
+
+Основни API Endpoints
+
+    Swap:
+    /api/swap/quote, /api/swap/execute
+    /api/enhanced-swap/quote, /execute, /validate, /security-check
+
+    Portfolio:
+    /api/portfolio/portfolio, /balances, /prices/history, /analytics
+
+    AI:
+    /api/ai/health, /chat, /market-analysis, /trading-signals
+
+    Tokens:
+    /api/tokens/popular, /search, /metadata
+
+🎨 FRONTEND ARCHITECTURE
+Компонентна йерархия
+
+App Layout
+├── AnimatedBackground
+├── Header
+│   ├── ElviraLogo
+│   ├── WalletMultiButton
+│   └── ThemeToggle
+└── HeroSection
+    ├── EnhancedSwapInterface
+    │   ├── TokenSelector
+    │   ├── SwapInterface
+    │   └── AIAnalysis
+    ├── PortfolioTracker
+    │   ├── TransactionHistory
+    │   └── PriceCharts
+    └── LoadingSystem
+
+Управление на състоянието
+
+    Глобално (Zustand): Wallet, Theme, User Settings
+
+    React Context: PortfolioProvider, ThemeProvider, WalletConnectionProvider
+
+    Локално: useState за UI, форми, loading
+
+Error Handling
+
+    Error Boundaries с логване на грешки
+
+    Toast Notifications за UI индикации
+
+🤖 AI INTEGRATION
+
+DeepseekAIService: пазарен анализ, оптимизации на суап, риск оценки, препоръки и търговски сигнали.
+🔐 SECURITY ARCHITECTURE
+
+    Валидация с Zod schema
+
+    Многостепенни проверки при суап (токен безопасност, манипулации, риск от портфейл, размери на транзакции, slippage)
+
+    Rate limiting с конфигурация за 100 заявки на 15 минути
+
+📊 MONITORING & OBSERVABILITY
+
+    Метрики: HTTP заявки, swap изпълнения, активни портфейли (Prometheus)
+
+    Health checks с агрегиране на статуси от всички услуги
+
+    Графана дашборд с основни метрики и аларми
+
+🚀 DEPLOYMENT ARCHITECTURE
+
+Docker Compose за production, включва frontend, backend, redis, nginx, prometheus, grafana.
+🧪 TESTING STRATEGY
+
+    Unit (>80% покритие), Integration, End-to-End тестове
+
+    Примерен тест с Jest и TypeScript за EnhancedJupiterService
+
+🔧 DEVELOPMENT WORKFLOW
+
+    Клониране, настройка на среда, инсталиране на зависимости, стартиране на dev сървъри
+
+    Скриптове за build, test, lint, type-check
+
+    Строги стандарти за код и ревюта
+
+📈 PERFORMANCE OPTIMIZATION
+
+    Backend: кеширане (Redis), connection pooling, паралелна обработка
+
+    Frontend: code splitting, lazy loading, кеширане, оптимизации на bundle
+
+🛡️ SECURITY CONSIDERATIONS
+
+    Никога не съхраняване на приватни ключове
+
+    Санитизация, криптиране, валидация, JWT, Wallet подписи
+
+    Защита срещу MEV, slippage и манипулации
+
+🔄 CI/CD PIPELINE
+
+Автоматизирано тестиране, build, security audit, blue-green deployment с rollback.
+📞 SUPPORT & MAINTENANCE
+
+    Мониторинг с критични и предупреждаващи аларми
+
+    Редовни ъпдейти и оптимизации
+
+    Поддръжка на база данни и системен хелт
+
+🎯 ROADMAP & FUTURE ENHANCEMENTS
+
+    Advanced trading (limit, stop-loss, DCA)
+
+    Portfolio analytics, tax reporting
+
+    Развитие на AI, мобилно приложение
+
+    Микросървиси, real-time, edge computing
+
+    Multi-signature, hardware wallet, fraud detection
+
